@@ -9,6 +9,9 @@ import (
 	//for SQLite, use the following line:
 	_ "github.com/mattn/go-sqlite3"
 
+	//for PostgreSQL, use the following line:
+	_ "github.com/lib/pq"
+
 	dsgc "github.com/vendelin8/dhtmlx-scheduler-golang-connector"
 	"net/http"
 	"os"
@@ -40,4 +43,3 @@ func main() {
 		panic(err)
 	}
 }
-

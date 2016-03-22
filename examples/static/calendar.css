@@ -1,7 +1,10 @@
 html, body {
-  height: 100%;
   padding: 0;
   margin: 0;
+}
+
+html, body, #cntScheduler {
+  height: 100%;
 }
 
 body {
@@ -13,4 +16,8 @@ main {
   flex: 1;
   width: 100%;
   padding: 0;
+}
+
+main, #cntScheduler {
+  width: 100%;
 }

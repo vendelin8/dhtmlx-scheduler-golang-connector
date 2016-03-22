@@ -13,12 +13,9 @@ import (
 
 const dateformat = "2006-01-02 15:04:05"
 
-var (
-	db *sql.DB //database connection
-)
-
 //prepared database queries
 var selectAll, selectFilter, update, _delete, insert *sql.Stmt
+var db *sql.DB //database connection
 
 func Open(driverName, dataSourceName, url string) error {
 	var err error
@@ -27,24 +24,36 @@ func Open(driverName, dataSourceName, url string) error {
 		return err
 	}
 
-	selectAll, err = db.Prepare(
+	var greatest, least string
+	switch driverName {
+	case "sqlite3":
+		greatest = "MAX"
+		least = "MIN"
+	case "mysql", "postgres":
+		greatest = "GREATEST"
+		least = "LEAST"
+	}
+
+	selectAllStr :=
 		`SELECT id, start_date, end_date, text
-		 FROM events
-	`)
+		 FROM event`
+	selectAll, err = db.Prepare(selectAllStr)
 	if err != nil {
 		return err
 	}
-	selectFilter, err = db.Prepare(
-		`SELECT id, start_date, end_date, text
-		 FROM events
-		 WHERE start_date > ? AND start_date < ?
-		 OR end_date > ? AND end_date < ?
-	`)
+	var b bytes.Buffer //date filter: max(start_date, from) < min(end_date, to)
+	b.WriteString(selectAllStr)
+	b.WriteString(" WHERE ")
+	b.WriteString(greatest)
+	b.WriteString("(start_date, ?) < ")
+	b.WriteString(least)
+	b.WriteString("(end_date, ?)")
+	selectFilter, err = db.Prepare(b.String())
 	if err != nil {
 		return err
 	}
 	update, err = db.Prepare(
-		`UPDATE events
+		`UPDATE event
 		 SET start_date = ?, end_date = ?, text = ?
 		 WHERE id = ?
 	`)
@@ -52,7 +61,7 @@ func Open(driverName, dataSourceName, url string) error {
 		return err
 	}
 	insert, err = db.Prepare(
-		`INSERT INTO events (start_date, end_date, text)
+		`INSERT INTO event (start_date, end_date, text)
 		 VALUES (?, ?, ?)
 	`)
 	if err != nil {
@@ -60,13 +69,12 @@ func Open(driverName, dataSourceName, url string) error {
 	}
 	_delete, err = db.Prepare(
 		`DELETE
-		 FROM events
+		 FROM event
 		 WHERE id = ?
 	`)
 	if err != nil {
 		return err
 	}
-//, _delete, insert
 
 	if len(url) == 0 {
 		url = "/connector"
@@ -95,7 +103,7 @@ func dhtmlxHandler(res http.ResponseWriter, req *http.Request) {
 			selectResult(res, rows, err)
 		} else {
 			to := req.FormValue("to")
-			rows, err := selectFilter.Query(from, to, from, to)
+			rows, err := selectFilter.Query(from, to)
 			selectResult(res, rows, err)
 		}
 	} else {
@@ -103,21 +111,22 @@ func dhtmlxHandler(res http.ResponseWriter, req *http.Request) {
 		getField := func(id, postfix string) string {
 			b.Reset()
 			b.WriteString(id)
+			b.WriteRune('_')
 			b.WriteString(postfix)
 			return req.FormValue(b.String())
 		}
 		actions := make([]Action, 0)
 		var action Action
 		for _, id := range(strings.Split(ids, ",")) {
-			status := getField(id, "_!nativeeditor_status")
-			oldId := getField(id, "_id")
+			status := getField(id, "!nativeeditor_status")
+			oldId := getField(id, "id")
 			newId := oldId
 			if status == "deleted" {
 				_, err = _delete.Exec(id)
 			} else {
-				start_date := getField(id, "_start_date")
-				end_date := getField(id, "_end_date")
-				text := getField(id, "_text")
+				start_date := getField(id, "start_date")
+				end_date := getField(id, "end_date")
+				text := getField(id, "text")
 				if status == "inserted" {
 					r, err := insert.Exec(start_date, end_date, text)
 					if err != nil {
